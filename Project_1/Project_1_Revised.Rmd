@@ -1,0 +1,241 @@
+---
+title: "Automated Recomender System for Matricies"
+subtitle: "DATA 612 Project"
+author: "Jack Russo"
+date: "6/1/2019"
+output: html_document
+---
+
+This recommender system is a multipurpose system. Given a matrix with missing values, this system will predict those values first by sampling a entires in a column or row. This training set is then used to build a correlation matrix, which in turn is used to predict the missing values.
+
+To test this system, a random 100 x 100 matrix is generated to simulate a user-item matrix with perfect information.
+NAs are then scattered to mask that information from the system. Once those values are estimated in a recommendation matrix, it is possible to compare if the predicted values are roughly the same number of standard deviations above or below the mean rating for the same item-user.
+
+
+# Generate Random Matrix.
+
+```{r}
+# Reproduce
+N = 100
+set.seed(N)
+# Generate Random Matrix
+matrix.raw <- matrix(floor(runif(N^2, min=0, max= (N + 1))), N, N)
+```
+
+# Build RMSE of Matrix Function.
+
+```{r}
+# Calculate RMSE of raw.matrix
+rmse <- function(Matrix, Matrix.expected_value){
+  
+  if(missing(Matrix.expected_value)){
+    Matrix.expected_value <- Matrix
+  }
+  
+  x <- c()
+  if(nrow(Matrix) == nrow(Matrix.expected_value) & ncol(Matrix) == ncol(Matrix.expected_value)){
+    for(i in 1:ncol(Matrix)){
+    for(j in 1:nrow(Matrix)){
+      if(is.na(Matrix[j,i])){
+       x <- x
+      }
+      else{
+        # Matrix.expected_value = Matrix by default.
+        x <- c(x,((Matrix[j,i] - mean(Matrix.expected_value, na.rm = TRUE))^2))
+      }
+    }
+  }
+  return(sqrt(mean(x)))
+  }
+  else{
+    return("Non matching matirx dimentions")
+  }
+}
+```
+
+# Scatter NAs in raw matrix.
+
+```{r}
+# Reproduce.
+set.seed(N)
+# Copy.
+matrix.NAs <- matrix.raw
+# Random Scatter NAs.
+sampling.index <- sample(N, size = .6*N, replace = FALSE)
+matrix.NAs[sampling.index,sampling.index] <- NA
+# Review.
+head(matrix.NAs)
+# Check percent of NAs in traing set.
+sum(is.na(matrix.NAs))/N^2
+```
+
+Just over a third of the data points are now missing from the original raw matirx.
+
+# Calculate the raw average of matrix.NAs
+
+```{r}
+mean(matrix.NAs, na.rm = T)
+```
+
+# Impute missing values of matrix.
+
+```{r}
+impute_missing_values_of_matrix.by_sampling <- function(Matrix.missing_entries, By_Column){
+  
+  # By_Column is Default Argument
+  if(missing(By_Column)){
+    By_Column = T
+  }
+  
+  if(sum(is.na(Matrix.missing_entries)) == 0){
+    return("No missing entries in Matrix.missing_entries")
+  }
+  
+  # Copy data
+  
+  Mat <- Matrix.missing_entries
+  
+  # Set Seed
+  
+  set.seed(length(Mat))
+
+  # Impute Values 
+  
+  if(By_Column){
+ 
+  for(i in 1:ncol(Mat)) {
+    
+    Mat[,i][is.na(Mat[,i])] <- sample(Matrix.missing_entries[,i][!is.na(Matrix.missing_entries[,i])], sum(is.na(Mat[,i])), replace = TRUE)
+  }
+  
+  return(Mat)
+    
+  }
+  
+  else{
+ 
+  for(j in 1:nrow(Mat)) {
+    
+    Mat[j,][is.na(Mat[j,])] <- sample(Matrix.missing_entries[j,][!is.na(Matrix.missing_entries[j,])], sum(is.na(Mat[j,])), replace = TRUE)
+  }
+  
+  return(Mat)
+    
+  }
+}
+```
+
+# Create training set.
+
+```{r}
+train <- impute_missing_values_of_matrix.by_sampling(Matrix.missing_entries = matrix.NAs)
+head(train)
+```
+
+# Build Recommendation Matrix.
+
+```{r}
+matrix.recommendation <- function(Matrix.missing_entries, Matrix.training, By_Column){
+  
+  if(missing(By_Column)){
+    By_Column = T
+  }
+  
+  if(sum(is.na(Matrix.missing_entries)) == 0){
+    return("No missing entries in Matrix.missing_entries")
+  }
+  
+  mat1 <- Matrix.missing_entries
+  
+  if(sum(is.na(Matrix.training)) > 0){
+    return("Missing entries in Matrix.training")
+  }
+  
+  mat2 <- Matrix.training
+  
+  if(By_Column){
+    
+    for(i in 1:ncol(mat1)){
+    for(j in 1:nrow(mat1)){
+        v <- cor(mat2, use = "pairwise.complete.obs", method = "pearson")[j,]
+        droped_indicies = 0
+        while(is.na(mat1[j,i]) & (droped_indicies < ncol(mat1))){
+          v <- v[v!=max(v)]
+          droped_indicies = droped_indicies + 1
+          mat1[j,i] <- mat1[j, ((which(v == max(v)) + droped_indicies))]
+        }
+      }
+    }
+    return(mat1)
+  }
+  
+  else{
+    for(j in 1:nrow(mat1)){
+    for(i in 1:ncol(mat1)){
+        v <- cor(mat2, use = "pairwise.complete.obs", method = "pearson")[,i]
+        droped_indicies = 0
+        while(is.na(mat1[j,i]) & (droped_indicies < nrow(mat1))){
+          v <- v[v!=max(v)]
+          droped_indicies = droped_indicies + 1
+          mat1[j,i] <- mat1[((which(v == max(v)) + droped_indicies)),i]
+        }
+      }
+    }
+    return(mat1)
+  }
+  
+}
+recommendations <- matrix.recommendation(Matrix.missing_entries = matrix.NAs, Matrix.training = train)
+```
+
+
+# Compare RMSE - Did the recommendation matrix predict the raw matrix values better than imputation alone?
+
+```{r}
+# Raw
+rmse(Matrix = matrix.raw)
+# Impute
+rmse(Matrix = train, Matrix.expected_value = matrix.raw)
+# Impute + Recomend 
+rmse(Matrix = recommendations, Matrix.expected_value = matrix.raw )
+```
+
+As can be seen from the read out, impuation by sampling and recomendation beat out impuation by sampling alone. Now it is possible to assign recomendations based on statisitcal significance, and compare those recommendations with what we would've actually recommended if we had full information about this system.
+
+```{r}
+Should_Recommend_Item <- function(Matrix, n_Standard_Deviations){
+  
+  if(sum(is.na(Matrix)) > 0){
+    return("Missing entries in Matrix")
+  }
+  
+  mat1 <- Matrix
+  mat2 <- Matrix
+  
+   for(i in 1:ncol(mat1)){
+    for(j in 1:nrow(mat1)){
+      if((mat1[j,i] > mean(mat2[,i]) + n_Standard_Deviations*(mat2[,i]))){
+        mat1[j,i] <- TRUE
+      }
+      else{
+        mat1[j,i] <- FALSE
+      }
+    }
+  }
+  return(mat1)
+}
+```
+
+# Percent of recommendations correctly predicted for missing data. 
+
+```{r warning = FALSE}
+matrix.item_recommended1 <- Should_Recommend_Item(Matrix = recommendations, n_Standard_Deviations = 1.5)
+matrix.item_recommended2 <- Should_Recommend_Item(Matrix = matrix.raw, n_Standard_Deviations = 1.5)
+
+sum(matrix.item_recommended1[matrix.item_recommended1 == TRUE & is.na(matrix.NAs)])/sum(matrix.item_recommended2[matrix.item_recommended2 == TRUE & is.na(matrix.NAs)])
+```
+
+# Summary
+
+With 36 percent of the data missing, we are still able to predict with 93.5 accuracy whether an item would be recomended within the subset of the missing data.
+

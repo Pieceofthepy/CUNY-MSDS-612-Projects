@@ -1,0 +1,134 @@
+---
+title: "Global Baseline Predictors and RMSE"
+subtitle: "DATA 612 Project 1"
+author: "Jack Russo"
+date: "6/1/2019"
+output: html_document
+---
+
+This recommender system will be a multipurpose system, based off my "InstaGression" function, which instantly finds the linear model with the smallest RMSE. As such I will use a random 100 x 100 matrix with missing values to test the prototype. 
+
+# Generate Random Matrix.
+
+```{r}
+# Reproduce
+N = 100
+set.seed(N)
+# Generate Random Matrix
+raw.matrix <- matrix(floor(runif(N^2, min=0, max= (N + 1))), N, N)
+```
+
+# Scatter NAs to Create Training Set.
+
+```{r}
+# Reproduce
+set.seed(N)
+# Copy
+train <- raw.matrix
+# Random Scatter NAs
+sampling.index <- sample(N, size = sqrt(N), replace = FALSE)
+train[sampling.index,sampling.index] <- NA
+# Review
+head(train)
+# Count NAs - On Average their should be one NA per row, or in this case 100 NAs
+sum(is.na(train)) == N
+```
+
+
+```{r}
+predict_missing_values_of_matrix_column <- function(target_var, Train){
+  
+  # copy data
+  
+  Mat <- Train
+  
+  # Set Seed
+  
+  set.seed(length(Mat[,target_var]))
+  
+  # Impute target values
+  
+  Mat[which(is.na(Mat[,target_var])), target_var] <- sample(Mat[,target_var][!is.na(Mat[,target_var])], sum(is.na(Mat[,target_var])), replace = TRUE)
+  
+  # Impute predictor values
+  
+  Mat[,-target_var][is.na(Train[,-target_var])] <- sample(Mat[,-target_var][!is.na(Mat[,-target_var])], sum(is.na(Mat[,-target_var])), replace = TRUE)
+  
+  # Build Data Frame
+  x <- Mat [, -target_var]
+  y <- Mat [,  target_var]
+  
+  # Build Model
+  
+  y.lm <- lm(y ~ x)
+  
+  # Predict missing values 
+  
+  y_hats <- data.frame(predict(y.lm, newdata = data.frame())[is.na(Mat[,target_var])])$predict.y.lm..newdata...data.frame....is.na.train...target_var...
+  
+
+  return(data.frame(predict(y.lm, newdata = data.frame())[is.na(Train[,target_var])]))
+}
+
+test <- predict_missing_values_of_matrix_column(6,train)
+test
+```
+
+# Demo
+
+```{r}
+FIB.matrix <- function(Train){
+  
+  # copy data
+  
+  dat <- Train
+  
+predict_missing_values_of_matrix_column <- function(target_var){
+  
+  # copy data
+  
+  Mat <- Train
+  
+  # Set Seed
+  
+  set.seed(length(Mat[,target_var]))
+  
+  # Impute target values
+  
+  Mat[which(is.na(Mat[,target_var])), target_var] <- sample(Mat[,target_var][!is.na(Mat[,target_var])], sum(is.na(Mat[,target_var])), replace = TRUE)
+  
+  # Impute predictor values
+  
+  Mat[,-target_var][is.na(Mat[,-target_var])] <- sample(Mat[,-target_var][!is.na(Mat[,-target_var])], sum(is.na(Mat[,-target_var])), replace = TRUE)
+  
+  # Build Data Frame
+  x <- Mat [, -target_var]
+  y <- Mat [,  target_var]
+  
+  # Build Model
+  
+  y.lm <- lm(y ~ x)
+  
+  # Predict missing values 
+  
+  y_hats <- data.frame(predict(y.lm, newdata = data.frame())[is.na(Train[,target_var])])$predict.y.lm..newdata...data.frame....is.na.Train...target_var...
+  
+  return(y_hats)
+         
+}
+
+ for(i in 1:ncol(dat)){
+ dat[,i][is.na(dat[,i])] <- predict_missing_values_of_matrix_column(target_var = i)
+}
+
+  return(dat)
+}
+
+# Count missing values in Dataset
+sum(is.na(train))
+
+# Test Function
+
+FIB.matrix(Train = train)
+```
+
